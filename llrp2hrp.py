@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import argparse
+import codecs
 import logging
 import SocketServer
 import struct
@@ -12,6 +13,14 @@ from hrp.tag import TidReadParameter, TagAddress, MatchParameter
 
 HOST = ''
 PORT = 5084
+HRP_HOST = '192.168.100.116'
+HRP_PORT = 9090
+HRP_TAG_FILTER_MS = 100
+HRP_TAG_FILTER_RSSI = 0
+
+
+# Don't try connecting the HRP reader
+FAKE_MODE = True
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +38,16 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
         self.expectingRemainingBytes = 0
         self.partialData = ''
         logger.debug('in LLRPMessageHandler')
+
+        # set up HRP connection
+        if not FAKE_MODE:
+          self.hrp = HRP(ip=HRP_HOST, port=HRP_PORT, ommit_ping=False, timeout=10)
+          self.hrp.set_log_level_debug()
+          logger.debug('Connecting to HRP reader...')
+          self.hrp.connect()
+
+          self.hrp_filter_time, self.hrp_rssi_threshold = self.hrp.tag_filter()
+          self.hrp.tag_filter(HRP_TAG_FILTER_MS, HRP_TAG_FILTER_RSSI)
 
         self.setup()
         try:
@@ -243,28 +262,52 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
             self.request.send(llrp_msg.msgbytes)
 
             # send some tags!
-            msg_dict = {'RO_ACCESS_REPORT': {
-                            'Ver': 1,
-                            'Type': 61,
-                            'ID': message_seq,
-                            'TagReportData': [{
-                                'Type': 240,
-                                'EPCData': {
-                                    'Type': 241,
-                                    'EPCLengthBits': 96,
-                                    'EPC': '001060310000000000000881'
+            if FAKE_MODE:
+              msg_dict = {'RO_ACCESS_REPORT': {
+                              'Ver': 1,
+                              'Type': 61,
+                              'ID': message_seq,
+                              'TagReportData': [{
+                                  'Type': 240,
+                                  'EPCData': {
+                                      'Type': 241,
+                                      'EPCLengthBits': 96,
+                                      'EPC': '001060310000000000000881'
+                                  }
+                              }, {
+                                  'Type': 240,
+                                  'EPCData': {
+                                      'Type': 241,
+                                      'EPCLengthBits': 96,
+                                      'EPC': '001060310000000000000882'
+                                  }
+                              }],
+                         }}
+              llrp_msg = LLRPMessage(msgdict=msg_dict)
+              self.request.send(llrp_msg.msgbytes)
+
+            if not FAKE_MODE:
+              for tag in self.hrp.read_tag(antennas=1):
+                  if tag is not None:
+                    tag_hex = codecs.encode(tag.epc, 'hex')
+                    logger.debug("TAG FOUND: " + tag_hex)
+                    msg_dict = {'RO_ACCESS_REPORT': {
+                                    'Ver': 1,
+                                    'Type': 61,
+                                    'ID': message_seq,
+                                    'TagReportData': [{
+                                        'Type': 240,
+                                        'EPCData': {
+                                            'Type': 241,
+                                            'EPCLengthBits': len(tag_hex) * 4,
+                                            'EPC': tag_hex
+                                        }}]
+                                    }
                                 }
-                            }, {
-                                'Type': 240,
-                                'EPCData': {
-                                    'Type': 241,
-                                    'EPCLengthBits': 96,
-                                    'EPC': '001060310000000000000882'
-                                }
-                            }],
-                        }}
-            llrp_msg = LLRPMessage(msgdict=msg_dict)
-            self.request.send(llrp_msg.msgbytes)
+
+                    llrp_msg = LLRPMessage(msgdict=msg_dict)
+                    self.request.send(llrp_msg.msgbytes)
+              self.hrp.tag_filter(self.hrp_filter_time, self.hrp_rssi_threshold)
 
         if msg_type == 'CLOSE_CONNECTION':
             # send a CLOSE_CONNECTION_RESPONSE
@@ -281,6 +324,10 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
             llrp_msg = LLRPMessage(msgdict=msg_dict)
             self.request.send(llrp_msg.msgbytes)
 
+
+    def finish(self):
+      if not FAKE_MODE:
+        self.hrp.disconnect()
 
 def main():
     parser = argparse.ArgumentParser()
