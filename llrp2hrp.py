@@ -5,6 +5,7 @@ import codecs
 import logging
 import SocketServer
 import struct
+import time
 from binascii import hexlify
 from sllurp.llrp import LLRPMessage
 from sllurp.llrp_proto import LLRPError
@@ -262,6 +263,7 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
             self.request.send(llrp_msg.msgbytes)
 
             # send some tags!
+            timestamp = int(time.time() * 10e5)
             if FAKE_MODE:
               msg_dict = {'RO_ACCESS_REPORT': {
                               'Ver': 1,
@@ -273,6 +275,10 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                                       'Type': 241,
                                       'EPCLengthBits': 96,
                                       'EPC': '001060310000000000000881'
+                                  },
+                                  'LastSeenTimestampUTC': {
+                                        'Type': 4,
+                                        'Microseconds': timestamp
                                   }
                               }, {
                                   'Type': 240,
@@ -280,6 +286,10 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                                       'Type': 241,
                                       'EPCLengthBits': 96,
                                       'EPC': '001060310000000000000882'
+                                  },
+                                  'LastSeenTimestampUTC': {
+                                        'Type': 4,
+                                        'Microseconds': timestamp
                                   }
                               }],
                          }}
@@ -301,7 +311,11 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                                             'Type': 241,
                                             'EPCLengthBits': len(tag_hex) * 4,
                                             'EPC': tag_hex
-                                        }}]
+                                        },
+                                     'LastSeenTimestampUTC': {
+                                        'Type': 4,
+                                        'Microseconds': timestamp
+                                      }}]
                                     }
                                 }
 
