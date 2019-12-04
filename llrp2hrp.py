@@ -18,10 +18,11 @@ HRP_HOST = '192.168.100.116'
 HRP_PORT = 9090
 HRP_TAG_FILTER_MS = 100
 HRP_TAG_FILTER_RSSI = 0
+KEEPALIVE_THRESHOLD = 3
 
 
 # Don't try connecting the HRP reader
-FAKE_MODE = True
+FAKE_MODE = False
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,8 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                         {
                             'UTCTimestamp':
                             {
-                                'Microseconds': 0
+                                'Microseconds': int(time.time() * 10e5)
+
                             },
                             'ConnectionAttemptEvent':
                             {
@@ -163,7 +165,7 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                             'GeneralDeviceCapabilities': {
                                  'MaxNumberOfAntennaSupported': 4,
                                  'CanSetAntennaProperties': 0,
-                                 'HasUTCClockCapability': 0,
+                                 'HasUTCClockCapability': 1,
                                  'DeviceManufacturerName': 0,
                                  'ModelName': 7206,
                                  'ReaderFirmwareVersion': '1',
@@ -262,9 +264,10 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
             llrp_msg = LLRPMessage(msgdict=msg_dict)
             self.request.send(llrp_msg.msgbytes)
 
+        if msg_type == 'ENABLE_ROSPEC' or msg_type == 'KEEPALIVE_ACK':
             # send some tags!
-            timestamp = int(time.time() * 10e5)
             if FAKE_MODE:
+              timestamp = int(time.time() * 10e5)
               msg_dict = {'RO_ACCESS_REPORT': {
                               'Ver': 1,
                               'Type': 61,
@@ -275,6 +278,10 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                                       'Type': 241,
                                       'EPCLengthBits': 96,
                                       'EPC': '001060310000000000000881'
+                                  },
+                                  'FirstSeenTimestampUTC': {
+                                    'Type': 2,
+                                    'Microseconds': timestamp
                                   },
                                   'LastSeenTimestampUTC': {
                                         'Type': 4,
@@ -287,6 +294,10 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                                       'EPCLengthBits': 96,
                                       'EPC': '001060310000000000000882'
                                   },
+                                  'FirstSeenTimestampUTC': {
+                                    'Type': 2,
+                                    'Microseconds': timestamp
+                                  },
                                   'LastSeenTimestampUTC': {
                                         'Type': 4,
                                         'Microseconds': timestamp
@@ -297,8 +308,10 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
               self.request.send(llrp_msg.msgbytes)
 
             if not FAKE_MODE:
+              keepalive_timer = 0
               for tag in self.hrp.read_tag(antennas=1):
                   if tag is not None:
+                    timestamp = int(time.time() * 10e5)
                     tag_hex = codecs.encode(tag.epc, 'hex')
                     logger.debug("TAG FOUND: " + tag_hex)
                     msg_dict = {'RO_ACCESS_REPORT': {
@@ -312,15 +325,37 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                                             'EPCLengthBits': len(tag_hex) * 4,
                                             'EPC': tag_hex
                                         },
+                                     'FirstSeenTimestampUTC': {
+                                        'Type': 2,
+                                        'Microseconds': timestamp
+                                      },
                                      'LastSeenTimestampUTC': {
                                         'Type': 4,
                                         'Microseconds': timestamp
+                                      },
+                                     'PeakRSSI': {
+                                        'Type': 6,
+                                        'PeakRSSI': tag.rssi
                                       }}]
                                     }
                                 }
 
                     llrp_msg = LLRPMessage(msgdict=msg_dict)
                     self.request.send(llrp_msg.msgbytes)
+                  else:
+                    logger.debug("TIMEOUT")
+                    keepalive_timer = keepalive_timer + 1
+                    if keepalive_timer > KEEPALIVE_THRESHOLD:
+                      self.hrp.end_read_tag = True
+                      message_seq = message_seq + 1
+                      msg_dict = {'KEEPALIVE' : {
+                                    'Ver': 1,
+                                    'Type': 62,
+                                    'ID': message_seq
+                                  }}
+                      llrp_msg = LLRPMessage(msgdict=msg_dict)
+                      self.request.send(llrp_msg.msgbytes)
+
               self.hrp.tag_filter(self.hrp_filter_time, self.hrp_rssi_threshold)
 
         if msg_type == 'CLOSE_CONNECTION':
