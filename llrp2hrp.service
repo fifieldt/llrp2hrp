@@ -1,0 +1,15 @@
+[Unit]
+Description=LLRP to HRP service
+After=multi-user.target
+
+[Service]
+Type=idle
+#Restart=always
+#LimitCORE=infinity
+Environment=PYTHONPATH=/home/pi/hrp:/home/pi/sllurp
+ExecStart=/usr/bin/python /home/pi/llrp2hrp/llrp2hrp.py -r 192.168.100.116
+User=pi
+Group=pi
+
+[Install]
+WantedBy=multi-user.target

@@ -10,6 +10,7 @@ from binascii import hexlify
 from sllurp.llrp import LLRPMessage
 from sllurp.llrp_proto import LLRPError
 from hrp import HRP, const, exception
+from hrp.exception import HRPFrameError
 from hrp.tag import TidReadParameter, TagAddress, MatchParameter
 
 HOST = ''
@@ -39,17 +40,23 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
         # for partial data transfers
         self.expectingRemainingBytes = 0
         self.partialData = ''
-        logger.debug('in LLRPMessageHandler')
 
         # set up HRP connection
         if not FAKE_MODE:
           self.hrp = HRP(ip=HRP_HOST, port=HRP_PORT, ommit_ping=False, timeout=10)
-          self.hrp.set_log_level_debug()
+          #self.hrp.set_log_level_debug()
           logger.debug('Connecting to HRP reader...')
-          self.hrp.connect()
+          try:
+              self.hrp.connect()
+              self.hrp_filter_time, self.hrp_rssi_threshold = self.hrp.tag_filter()
+              self.hrp.tag_filter(HRP_TAG_FILTER_MS, HRP_TAG_FILTER_RSSI)
+          except HRPFrameError:
+              logger.debug('Connect didn\'t work, disconnecting and trying again ...')
+              self.hrp.disconnect()
+              self.hrp.connect()
+              self.hrp_filter_time, self.hrp_rssi_threshold = self.hrp.tag_filter()
+              self.hrp.tag_filter(HRP_TAG_FILTER_MS, HRP_TAG_FILTER_RSSI)
 
-          self.hrp_filter_time, self.hrp_rssi_threshold = self.hrp.tag_filter()
-          self.hrp.tag_filter(HRP_TAG_FILTER_MS, HRP_TAG_FILTER_RSSI)
 
         self.setup()
         try:
@@ -58,7 +65,6 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
             self.finish()
 
     def handle(self):
-        logger.debug('in handle')
         global message_seq
         # send a ReaderEventNotification on connection
         msg_dict = {'READER_EVENT_NOTIFICATION': {
