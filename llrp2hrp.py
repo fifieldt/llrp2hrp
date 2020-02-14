@@ -10,7 +10,7 @@ from binascii import hexlify
 from sllurp.llrp import LLRPMessage
 from sllurp.llrp_proto import LLRPError
 from hrp import HRP, const, exception
-from hrp.exception import HRPFrameError
+from hrp.exception import HRPFrameError, HRPNetworkError
 from hrp.tag import TidReadParameter, TagAddress, MatchParameter
 
 HOST = ''
@@ -20,6 +20,7 @@ HRP_PORT = 9090
 HRP_TAG_FILTER_MS = 100
 HRP_TAG_FILTER_RSSI = 0
 KEEPALIVE_THRESHOLD = 3
+BACKOFF_TIME = 30
 
 
 # Don't try connecting the HRP reader
@@ -46,16 +47,20 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
           self.hrp = HRP(ip=HRP_HOST, port=HRP_PORT, ommit_ping=False, timeout=10)
           #self.hrp.set_log_level_debug()
           logger.debug('Connecting to HRP reader...')
-          try:
-              self.hrp.connect()
-              self.hrp_filter_time, self.hrp_rssi_threshold = self.hrp.tag_filter()
-              self.hrp.tag_filter(HRP_TAG_FILTER_MS, HRP_TAG_FILTER_RSSI)
-          except HRPFrameError:
-              logger.debug('Connect didn\'t work, disconnecting and trying again ...')
-              self.hrp.disconnect()
-              self.hrp.connect()
-              self.hrp_filter_time, self.hrp_rssi_threshold = self.hrp.tag_filter()
-              self.hrp.tag_filter(HRP_TAG_FILTER_MS, HRP_TAG_FILTER_RSSI)
+          connected = False
+          while not connected:
+            try:
+                  self.hrp.connect()
+                  self.hrp_filter_time, self.hrp_rssi_threshold = self.hrp.tag_filter()
+                  self.hrp.tag_filter(HRP_TAG_FILTER_MS, HRP_TAG_FILTER_RSSI)
+                  connected = True
+            except HRPFrameError:
+                  logger.debug('Connect didn\'t work, disconnecting and trying again ...')
+                  self.hrp.disconnect()
+            except HRPNetworkError:
+                  logger.debug('Could not connect to reader, waiting and trying again ...')
+                  self.hrp.disconnect()
+                  time.sleep(BACKOFF_TIME)
 
 
         self.setup()
