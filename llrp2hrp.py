@@ -324,7 +324,8 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
 
             if not FAKE_MODE:
               keepalive_timer = 0
-              for tag in self.hrp.read_tag(antennas=1):
+              # This enables antenna port 1 and 3.
+              for tag in self.hrp.read_tag(antennas=5):
                   if tag is not None:
                     timestamp = int(time.time() * 10e5)
                     tag_hex = codecs.encode(tag.epc, 'hex')
