@@ -90,6 +90,9 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
         data = self.request.recv(1024)
         logger.debug('got %d bytes from reader: %s', len(data),
                      hexlify(data))
+        """
+        XXX this block could be deleted
+        """
         if self.expectingRemainingBytes:
             if len(data) >= self.expectingRemainingBytes:
                 data = self.partialData + data
@@ -108,6 +111,7 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                     struct.unpack(LLRPMessage.full_hdr_fmt,
                                   data[:LLRPMessage.full_hdr_len])
             else:
+                # XXX
                 logger.warning('Too few bytes (%d) to unpack message header',
                                len(data))
                 self.partialData = data
@@ -118,6 +122,7 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
             logger.debug('expect %d bytes (have %d)', msg_len, len(data))
 
             if len(data) < msg_len:
+                # XXX
                 # got too few bytes
                 logger.debug("Less than an LLRP Message Size")
                 self.partialData = data
@@ -257,7 +262,7 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
 
         if msg_type == 'ENABLE_ROSPEC':
             # send a ADD_ROSPEC_RESPONSE
-            msg_dict = {'ADD_ROSPEC_RESPONSE': {
+            msg_dict = {'ENABLE_ROSPEC_RESPONSE': {
                             'Ver': 1,
                             'Type': 34,
                             'ID': message_seq,
