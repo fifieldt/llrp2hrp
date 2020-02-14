@@ -46,7 +46,7 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
         if not FAKE_MODE:
           self.hrp = HRP(ip=HRP_HOST, port=HRP_PORT, ommit_ping=False, timeout=10)
           # self.hrp.set_log_level_debug()
-          logger.debug('Connecting to HRP reader...')
+          logger.info('Connecting to HRP reader...')
           connected = False
           while not connected:
             try:
@@ -55,10 +55,10 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                 self.hrp.tag_filter(HRP_TAG_FILTER_MS, HRP_TAG_FILTER_RSSI)
                 connected = True
             except HRPFrameError:
-                logger.debug('Connect didn\'t work, disconnecting and trying again ...')
+                logger.warning('Connect didn\'t work, disconnecting and trying again ...')
                 self.hrp.disconnect()
             except HRPNetworkError:
-                logger.debug('Could not connect to reader, waiting and trying again ...')
+                logger.warning('Could not connect to reader, waiting and trying again ...')
                 self.hrp.disconnect()
                 time.sleep(BACKOFF_TIME)
 
@@ -329,7 +329,7 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                   if tag is not None:
                     timestamp = int(time.time() * 10e5)
                     tag_hex = codecs.encode(tag.epc, 'hex')
-                    logger.debug("TAG FOUND: " + tag_hex)
+                    logger.info("TAG FOUND: " + tag_hex)
                     msg_dict = {'RO_ACCESS_REPORT': {
                                     'Ver': 1,
                                     'Type': 61,
@@ -359,7 +359,7 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                     llrp_msg = LLRPMessage(msgdict=msg_dict)
                     self.request.send(llrp_msg.msgbytes)
                   else:
-                    logger.debug("TIMEOUT")
+                    logger.info("TIMEOUT")
                     keepalive_timer = keepalive_timer + 1
                     if keepalive_timer > KEEPALIVE_THRESHOLD:
                       self.hrp.end_read_tag = True
@@ -402,7 +402,7 @@ def main():
         help='IP address of reader'
     )
     args = parser.parse_args()
-    logging.basicConfig(level=logging.DEBUG)
+    logging.basicConfig(level=logging.INFO)
     SocketServer.TCPServer.allow_reuse_address = True
     server = SocketServer.TCPServer((HOST, PORT), LLRPMessageHandler)
     logger.info("LLRP server running...")
