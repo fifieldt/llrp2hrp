@@ -45,23 +45,22 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
         # set up HRP connection
         if not FAKE_MODE:
           self.hrp = HRP(ip=HRP_HOST, port=HRP_PORT, ommit_ping=False, timeout=10)
-          #self.hrp.set_log_level_debug()
+          # self.hrp.set_log_level_debug()
           logger.debug('Connecting to HRP reader...')
           connected = False
           while not connected:
             try:
-                  self.hrp.connect()
-                  self.hrp_filter_time, self.hrp_rssi_threshold = self.hrp.tag_filter()
-                  self.hrp.tag_filter(HRP_TAG_FILTER_MS, HRP_TAG_FILTER_RSSI)
-                  connected = True
+                self.hrp.connect()
+                self.hrp_filter_time, self.hrp_rssi_threshold = self.hrp.tag_filter()
+                self.hrp.tag_filter(HRP_TAG_FILTER_MS, HRP_TAG_FILTER_RSSI)
+                connected = True
             except HRPFrameError:
-                  logger.debug('Connect didn\'t work, disconnecting and trying again ...')
-                  self.hrp.disconnect()
+                logger.debug('Connect didn\'t work, disconnecting and trying again ...')
+                self.hrp.disconnect()
             except HRPNetworkError:
-                  logger.debug('Could not connect to reader, waiting and trying again ...')
-                  self.hrp.disconnect()
-                  time.sleep(BACKOFF_TIME)
-
+                logger.debug('Could not connect to reader, waiting and trying again ...')
+                self.hrp.disconnect()
+                time.sleep(BACKOFF_TIME)
 
         self.setup()
         try:
@@ -138,7 +137,7 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                 self.expectingRemainingBytes = 0
                 try:
                     lmsg = LLRPMessage(msgbytes=data[:msg_len])
-                    self.handleMessage(lmsg, message_seq)
+                    self.handle_message(lmsg, message_seq)
                     message_seq = message_seq + 1
                     data = self.request.recv(1024)
                 except LLRPError:
@@ -149,7 +148,7 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
 
         message_seq = 1
 
-    def handleMessage(self, lmsg, message_seq):
+    def handle_message(self, lmsg, message_seq):
         msg_type = lmsg.getName()
         if msg_type == 'GET_SUPPORTED_VERSION':
             # we only support reader version 1, this is a v2 command.
@@ -364,7 +363,7 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                     if keepalive_timer > KEEPALIVE_THRESHOLD:
                       self.hrp.end_read_tag = True
                       message_seq = message_seq + 1
-                      msg_dict = {'KEEPALIVE' : {
+                      msg_dict = {'KEEPALIVE': {
                                     'Ver': 1,
                                     'Type': 62,
                                     'ID': message_seq
@@ -389,10 +388,10 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
             llrp_msg = LLRPMessage(msgdict=msg_dict)
             self.request.send(llrp_msg.msgbytes)
 
-
     def finish(self):
       if not FAKE_MODE:
         self.hrp.disconnect()
+
 
 def main():
     parser = argparse.ArgumentParser()
