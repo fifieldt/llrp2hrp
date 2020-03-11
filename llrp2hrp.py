@@ -2,8 +2,10 @@
 
 import argparse
 import codecs
+import lcddriver
 import logging
 import SocketServer
+import socket
 import struct
 import time
 from binascii import hexlify
@@ -21,12 +23,19 @@ HRP_TAG_FILTER_MS = 100
 HRP_TAG_FILTER_RSSI = 0
 KEEPALIVE_THRESHOLD = 3
 BACKOFF_TIME = 30
+HAVE_LCD = True
 
 
 # Don't try connecting the HRP reader
 FAKE_MODE = False
 
 logger = logging.getLogger(__name__)
+
+try:
+    display = lcddriver.lcd()
+    display.lcd_clear()
+except:
+    HAVE_LCD = False
 
 message_seq = 0
 
@@ -47,6 +56,8 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
           self.hrp = HRP(ip=HRP_HOST, port=HRP_PORT, ommit_ping=False, timeout=10)
           # self.hrp.set_log_level_debug()
           logger.info('Connecting to HRP reader...')
+          if HAVE_LCD:
+              display.lcd_display_string('Connecting:HRP', 2)
           connected = False
           while not connected:
             try:
@@ -278,6 +289,8 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                         }}
             llrp_msg = LLRPMessage(msgdict=msg_dict)
             self.request.send(llrp_msg.msgbytes)
+            if HAVE_LCD:
+                display.lcd_display_string('Reading tags  ', 2)
 
         if msg_type == 'ENABLE_ROSPEC' or msg_type == 'KEEPALIVE_ACK':
             # send some tags!
@@ -325,6 +338,7 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
             if not FAKE_MODE:
               keepalive_timer = 0
               # This enables antenna port 1 and 3.
+              #for tag in self.hrp.read_tag(antennas=5, match=MatchParameter(const.MATCH_EPC, 0x20, codecs.decode('01', 'hex'))):
               for tag in self.hrp.read_tag(antennas=5):
                   if tag is not None:
                     timestamp = int(time.time() * 10e5)
@@ -389,9 +403,26 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
             llrp_msg = LLRPMessage(msgdict=msg_dict)
             self.request.send(llrp_msg.msgbytes)
 
+
+
     def finish(self):
       if not FAKE_MODE:
         self.hrp.disconnect()
+      if HAVE_LCD:
+         display.lcd_display_string('Disconnected', 2)
+
+def get_real_ip():
+    """
+    Attempts to get the IP address that's used for interesting things.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 53))
+    ip_address = s.getsockname()[0]
+    first_octet = ip_address.split('.')
+    if first_octet != '127' and first_octet != '169':
+        return ip_address
+    else:
+        return False
 
 
 def main():
@@ -403,9 +434,20 @@ def main():
     )
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO)
+    # get the local IP address
+    real_ip = get_real_ip()
+    while real_ip is False:
+        real_ip = get_real_ip()
+        display.lcd_display_string("No Network.", 1)
+        display.lcd_display_string("Set up hotspot", 2)
+        time.sleep(BACKOFF_TIME)
+    if HAVE_LCD:
+        display.lcd_display_string(real_ip, 1)
     SocketServer.TCPServer.allow_reuse_address = True
     server = SocketServer.TCPServer((HOST, PORT), LLRPMessageHandler)
     logger.info("LLRP server running...")
+    if HAVE_LCD:
+        display.lcd_display_string("LLRP server on", 2)
     server.serve_forever()
     server.server_close()
 
