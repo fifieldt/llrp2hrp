@@ -156,6 +156,10 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
                                      'will not decode %d remaining bytes',
                                      len(data))
                     break
+                except HRPFrameError:
+                    logger.exception('Error with HRP Reader. Disconnecting')
+                    break
+
 
         message_seq = 1
 
@@ -416,7 +420,11 @@ def get_real_ip():
     Attempts to get the IP address that's used for interesting things.
     """
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    s.connect(("8.8.8.8", 53))
+    try:
+        s.connect(("8.8.8.8", 53))
+    except:
+        return False
+
     ip_address = s.getsockname()[0]
     first_octet = ip_address.split('.')
     if first_octet != '127' and first_octet != '169':
