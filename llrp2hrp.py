@@ -249,6 +249,23 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
             llrp_msg = LLRPMessage(msgdict=msg_dict)
             self.request.send(llrp_msg.msgbytes)
 
+        # New in WebScorer 4.3.0 update
+        if msg_type == 'GET_READER_CONFIG':
+            # send a GET_READER_CONFIG_RESPONSE
+            msg_dict = {'GET_READER_CONFIG_RESPONSE': {
+                            'Ver': 1,
+                            'Type': 12,
+                            'ID': message_seq,
+                            'LLRPStatus': {
+                                'Type': 287,
+                                'StatusCode': 'Success',
+                                'ErrorDescription': '',
+                            },
+                        }}
+            llrp_msg = LLRPMessage(msgdict=msg_dict)
+            self.request.send(llrp_msg.msgbytes)
+
+
         if msg_type == 'SET_READER_CONFIG':
             # send a SET_READER_CONFIG_RESPONSE
             msg_dict = {'SET_READER_CONFIG_RESPONSE': {
@@ -342,8 +359,8 @@ class LLRPMessageHandler(SocketServer.StreamRequestHandler):
             if not FAKE_MODE:
               keepalive_timer = 0
               # This enables antenna port 1 and 3.
-              #for tag in self.hrp.read_tag(antennas=5, match=MatchParameter(const.MATCH_EPC, 0x20, codecs.decode('01', 'hex'))):
-              for tag in self.hrp.read_tag(antennas=5):
+              for tag in self.hrp.read_tag(antennas=5, match=MatchParameter(const.MATCH_EPC, 0x20, codecs.decode('b20200411666', 'hex'))):
+                  #for tag in self.hrp.read_tag(antennas=5):
                   if tag is not None:
                     timestamp = int(time.time() * 10e5)
                     tag_hex = codecs.encode(tag.epc, 'hex')
